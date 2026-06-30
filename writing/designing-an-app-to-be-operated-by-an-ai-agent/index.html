@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Designing an app to be operated by an AI agent — Eduardo Haraguchi</title>
+  <title>Three doors and a hard gate · Eduardo Haraguchi</title>
   <meta name="description" content="How I designed marginalia so an AI agent operates it as a first-class user: one implementation behind three doors, per-turn context rendered from the database, and a deterministic gate between the model and anything irreversible.">
   <meta name="author" content="Eduardo Haraguchi">
   <link rel="canonical" href="https://hirojinho.github.io/writing/designing-an-app-to-be-operated-by-an-ai-agent/">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="Designing an app to be operated by an AI agent">
+  <meta property="og:title" content="Three doors and a hard gate: building an app for an AI agent to operate">
   <meta property="og:description" content="How I designed marginalia so an AI agent operates it as a first-class user: one implementation behind three doors, per-turn context rendered from the database, and a deterministic gate between the model and anything irreversible.">
   <meta property="og:url" content="https://hirojinho.github.io/writing/designing-an-app-to-be-operated-by-an-ai-agent/">
   <meta property="og:site_name" content="Eduardo Haraguchi">
   <meta property="article:published_time" content="2026-06-30">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Designing an app to be operated by an AI agent">
+  <meta name="twitter:title" content="Three doors and a hard gate: building an app for an AI agent to operate">
   <meta name="twitter:description" content="How I designed marginalia so an AI agent operates it as a first-class user: one implementation behind three doors, per-turn context rendered from the database, and a deterministic gate between the model and anything irreversible.">
   <style>
     :root {
@@ -163,8 +163,8 @@
     <p class="topnav reveal"><a href="/"><span class="dia">◆</span> Eduardo Haraguchi</a></p>
 
     <header class="head reveal">
-      <h1>Designing an app to be operated by an AI agent</h1>
-      <p class="dek">Notes from marginalia, a self-hosted study tutor where an AI agent is a first-class operator — and the architecture decisions that made that load-bearing instead of a demo.</p>
+      <h1>Three doors and a hard gate: building an app for an AI agent to operate</h1>
+      <p class="dek">Notes from marginalia, a self-hosted study tutor where an AI agent operates the app through the same doors a human does, and the deterministic gate that makes that safe to leave running overnight.</p>
       <p class="byline">
         <span class="who">Eduardo Haraguchi</span>
         <span class="sep">/</span>
@@ -187,20 +187,33 @@ for all state, RAG over a local course corpus, and an LLM tutor that reads your 
 tracks a study plan, and takes notes with you. The tutor isn&rsquo;t the interesting part. The
 architecture around it is, specifically the decisions that make &ldquo;an agent operates this
 app&rdquo; load-bearing instead of a demo.</p>
-<p>One thing shapes everything else, so I&rsquo;ll say it plainly. I&rsquo;m an AI-infrastructure
-engineer, not a career Go programmer. My Go is thin. I built much of marginalia by
-directing coding agents rather than hand-writing idiomatic Go, and that turned out to be
-the point rather than an embarrassing footnote: I used coding agents to build software
-meant to be operated by agents. Designing for an agent operator and being driven by one
-are the same skill from two ends. The discipline I leaned on wasn&rsquo;t Go fluency. It was
-deciding what the operations are, where the boundaries sit, and what the agent is and
-isn&rsquo;t allowed to touch, then making an agent execute against that. More on that later.</p>
+<p>None of this framing is new anymore. Mathias Biilmann
+<a href="https://biilmann.blog/articles/introducing-ax/">named it &ldquo;Agent Experience&rdquo;</a>
+in early 2025, and &ldquo;design for the agent as a first-class user&rdquo; has been written up a dozen
+times since. Jim Nielsen
+<a href="https://blog.jim-nielsen.com/2025/thoughts-on-ax/">pushed back</a> that optimizing for
+agents makes software more obtuse for the humans still using it. A parallel argument runs
+over whether the agent&rsquo;s door should be
+<a href="https://chrlschn.dev/blog/2026/03/mcp-is-dead-long-live-mcp/">an MCP server or just a CLI</a>,
+and what each costs in tokens. I&rsquo;m not adding another manifesto to that pile. marginalia is
+the part those posts skip: a worked implementation with the tradeoffs in ADRs and a dumb
+deterministic check that gets the final say. And on Nielsen&rsquo;s worry, mine went the other
+way. Designing for an agent operator pushed me toward a cleaner core, and the human
+interface got better for it, not worse.</p>
+<p>One thing shapes everything else, so I&rsquo;ll say it plainly. I built much of marginalia by
+directing coding agents rather than writing the Go by hand. I&rsquo;m an AI-infrastructure
+engineer, and this is software meant to be operated by agents, built by directing them.
+That reads like a confession; it isn&rsquo;t one. When an agent writes the code, the engineering
+moves upstream. The hard part stops being syntax and becomes deciding what the operations
+are, where the boundaries sit, and what the agent is and isn&rsquo;t allowed to touch, then
+forcing the implementation to prove it obeys. That discipline is what the ADRs, the
+<code>claw-cli</code> contract, and the overnight verifier are. It&rsquo;s the spine of this writeup.</p>
 <p>A word on scale. This is single-developer, personal-use software that runs on a home
 server and gets used daily for real study. It is not a multi-tenant SaaS. Some decisions
 below are <em>right because</em> the blast radius is one person and one box, and I&rsquo;ll say so
-where it matters. The claim isn&rsquo;t that this is production-grade at scale. It&rsquo;s that
-designing for an agent operator forced a cleaner architecture than I&rsquo;d have written for a
-human alone.</p>
+where it matters. The claim isn&rsquo;t that this is production-grade at scale. It&rsquo;s that one
+user and one box is a constraint I built with on purpose, and where it changed a decision,
+I say so.</p>
 <h2>Why agent-operability is a real axis</h2>
 <p>Decide that an agent should <em>operate</em> your app, not just answer questions about it but
 change its state, and you hit a question most apps never ask: what is the real surface of
@@ -353,7 +366,7 @@ blocks. The <code>### Pre-baseline</code> block must <strong>fail on current <co
 satisfied, or verifier broken), the run aborts to <code>failed/</code>. After implementation, the
 <code>### Post-acceptance</code> block, usually the same script, must <strong>pass</strong> against a staging
 instance built from the new binary. Exit codes are the only judgment that crosses the
-model/deterministic boundary — not the model&rsquo;s self-report, not a diff review. The gate
+model/deterministic boundary. Not the model&rsquo;s self-report, not a diff review. The gate
 runner spins staging on a separate port against a snapshot of the prod DB,
 runs pre-baseline against the <em>old</em> binary and post-acceptance against the <em>new</em> one, and
 only a clean exit-0 lets the change merge <code>--ff-only</code> and deploy. The same deterministic-
@@ -367,7 +380,7 @@ The author&rsquo;s pre-baseline-must-fail step <em>is</em> the red test. If you 
 that fails before and passes after, you don&rsquo;t have a spec the agent can be trusted to
 execute. The directory itself is the state machine:
 <code>queue/ → in-progress/ → done/ | failed/</code>.</p>
-<p>The orchestrator scripts — scheduler, staging spin-up, deploy, rollback — live in a private
+<p>The orchestrator scripts (scheduler, staging spin-up, deploy, rollback) live in a private
 infra repo, not here. What&rsquo;s in this repo, and described above, is the spec contract the
 pipeline enforces: the verifier-as-gate, the pre-baseline-must-fail red step, and the
 directory state machine.</p>
@@ -438,7 +451,7 @@ with <code>--new-from-rev HEAD</code>, so the clean baseline stays clean as the 
 <li><strong>The capability ceiling is the model fleet, not the harness.</strong> Protocol-heavy skills
   degrade on non-Claude OpenCode models. The app names this rather than papering over it.</li>
 <li><strong>Almost every &ldquo;one operation, three doors&rdquo; guarantee rests on convention, not a
-  compiler.</strong> Nothing <em>forces</em> a new <code>App</code> method to gain a <code>claw-cli</code> subcommand — no
+  compiler.</strong> Nothing <em>forces</em> a new <code>App</code> method to gain a <code>claw-cli</code> subcommand. No
   codegen, test, or lint check enforces door parity. Several ADRs (0016, 0017) exist
   precisely because a capability was added to the UI/Go layer but not wired to the agent&rsquo;s
   door, and had to be retrofitted. The pattern is a discipline, not an invariant.</li>
