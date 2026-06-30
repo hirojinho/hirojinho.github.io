@@ -298,6 +298,14 @@ events: <code>token</code> (text deltas), <code>reasoning</code> (thinking delta
 <code>skill_start</code>, and <code>done</code> (with token-usage counts). Because the agent invokes <code>claw-cli</code>
 <em>through Pi&rsquo;s bash tool</em>, every domain operation surfaces as a <code>tool_start</code>/<code>tool_end</code>
 pair.</p>
+<p>This indirection is the other reason I reached for Pi, beyond inheriting the scaffolding I
+already had in Claude Code. Because the app talks to a generic runtime over RPC rather than
+to a hardwired Claude integration, it isn&rsquo;t welded to any one agent. The integration point
+is &ldquo;an agent drives <code>claw-cli</code>,&rdquo; not &ldquo;Claude specifically.&rdquo; The model is a configuration
+choice across the OpenCode fleet, not a constant in the code, so the same application
+transposes to whatever agent someone brings: point it at a different model, mount a
+different skill set, and nothing downstream changes. The app is built around an agent
+operator; which operator plugs in stays open.</p>
 <p><code>handler/chat.go</code> translates that stream into Server-Sent Events. <code>streamPiTurn()</code> reads
 <code>PiEvent</code> values off a channel and <code>handlePiEvent()</code> writes and flushes one SSE frame per
 event: <code>{"delta": "..."}</code> for tokens, an input summary for <code>tool_start</code>, an output summary
