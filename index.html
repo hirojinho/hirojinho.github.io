@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eduardo Haraguchi — AI Infrastructure &amp; Distributed Systems Engineer</title>
+  <meta name="description" content="AI-infrastructure and distributed-systems engineer. Messaging infrastructure at scale, LLM systems, and software designed to be operated by AI agents.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
+  <style>
+    :root {
+      --bg: oklch(1 0 0);
+      --ink: oklch(0.23 0 0);
+      --muted: oklch(0.50 0 0);
+      --faint: oklch(0.90 0 0);
+      --accent: oklch(0.50 0.11 110);
+      --accent-soft: oklch(0.62 0.09 110);
+      --serif: Iowan Old Style, Palatino, Georgia, "Times New Roman", serif;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --measure: 68ch;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: clamp(1rem, 0.96rem + 0.2vw, 1.075rem);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .wrap {
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: clamp(2.5rem, 6vw, 6rem) clamp(1.25rem, 5vw, 2rem) 4rem;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+      transition: border-color .18s ease, color .18s ease;
+    }
+    a:hover { border-bottom-color: var(--accent); color: var(--accent-soft); }
+    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+    header { margin-bottom: clamp(2.25rem, 5vw, 3.25rem); }
+    .mark {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.02em;
+      color: var(--accent);
+      margin: 0 0 1.1rem;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: clamp(2.1rem, 1.5rem + 3vw, 3.1rem);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+      text-wrap: balance;
+    }
+    .role {
+      font-size: clamp(1.05rem, 1rem + 0.5vw, 1.3rem);
+      font-weight: 500;
+      margin: 0 0 0.4rem;
+    }
+    .meta { color: var(--muted); font-size: 0.95rem; margin: 0; }
+
+    .lede {
+      font-size: clamp(1.12rem, 1.05rem + 0.5vw, 1.35rem);
+      line-height: 1.55;
+      max-width: var(--measure);
+      margin: 0 0 clamp(2.25rem, 5vw, 3rem);
+      text-wrap: pretty;
+    }
+
+    section { margin-bottom: clamp(2.25rem, 5vw, 3.25rem); max-width: var(--measure); }
+    h2 {
+      font-family: var(--sans);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 1.2rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--faint);
+    }
+
+    .points { display: grid; gap: 1.4rem; }
+    .point { margin: 0; }
+    .point b { font-weight: 600; }
+    .point p { margin: 0.2rem 0 0; color: color-mix(in oklab, var(--ink) 88%, var(--muted)); }
+
+    .work { display: grid; gap: 1.3rem; }
+    .item { margin: 0; }
+    .item-h { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+    .item-h .name { font-weight: 600; font-size: 1.05rem; }
+    .item-h .tag { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); letter-spacing: 0.02em; }
+    .item p { margin: 0.2rem 0 0; color: color-mix(in oklab, var(--ink) 88%, var(--muted)); }
+
+    .soon { color: var(--muted); font-style: italic; margin: 0; }
+
+    footer {
+      max-width: var(--measure);
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--faint);
+      display: flex;
+      gap: 1.4rem;
+      flex-wrap: wrap;
+      font-size: 0.95rem;
+    }
+    footer a { border-bottom: none; }
+    footer a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .fade { animation: rise .7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+      header.fade { animation-delay: .02s; }
+      .lede.fade { animation-delay: .08s; }
+      section:nth-of-type(1).fade { animation-delay: .14s; }
+      section:nth-of-type(2).fade { animation-delay: .2s; }
+      section:nth-of-type(3).fade { animation-delay: .26s; }
+      footer.fade { animation-delay: .32s; }
+      @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="fade">
+      <p class="mark">◆ ed.haraguchi</p>
+      <h1>Eduardo Haraguchi</h1>
+      <p class="role">AI Infrastructure &amp; Distributed Systems Engineer</p>
+      <p class="meta">Remote · Brazil</p>
+    </header>
+
+    <p class="lede fade">
+      I work on the systems that keep LLMs and high-throughput services reliable and cheap in
+      production, and I build tooling meant to be driven by AI agents, not just clicked through a UI.
+    </p>
+
+    <section class="fade">
+      <h2>What I work on</h2>
+      <div class="points">
+        <div class="point">
+          <b>Messaging infrastructure.</b>
+          <p>I own the messaging layer of a WhatsApp AI ordering platform. I led the migration from
+          thousands of per-phone job queues to a single sender-Groups queue, which cut tail latency
+          ~6× at near-zero send failure, and I built the observability around it (OpenTelemetry,
+          PostHog, BigQuery → Metabase).</p>
+        </div>
+        <div class="point">
+          <b>LLM systems.</b>
+          <p>Bringing model cost and latency down with deterministic fast-paths, retrieval and
+          embedding work, and evaluation harnesses for a system whose output isn't deterministic.</p>
+        </div>
+        <div class="point">
+          <b>Agent-operated software.</b>
+          <p>I build tools an AI agent can operate as a first-class user, and I increasingly build
+          them by directing coding agents. marginalia is where I work this out.</p>
+        </div>
+        <div class="point">
+          <b>Foundations.</b>
+          <p>TypeScript, Node.js, distributed systems, queueing and backpressure, observability.
+          Starting a master's in formal methods, because I want systems I can reason about.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="fade">
+      <h2>Selected work</h2>
+      <div class="work">
+        <div class="item">
+          <span class="item-h">
+            <a class="name" href="https://github.com/hirojinho/marginalia">marginalia</a>
+            <span class="tag">Go · SQLite</span>
+          </span>
+          <p>A self-hosted AI study tutor built so an agent can operate it: every action reachable
+          through a web UI, a token-gated HTTP API, and a CLI the agent drives, with per-turn context
+          synthesized from live database state. Runs on my home server.</p>
+        </div>
+        <div class="item">
+          <span class="item-h">
+            <a class="name" href="https://github.com/hirojinho/concurrent-text-editor-doc-model">concurrent-text-editor</a>
+            <span class="tag">Go · Erlang · Haskell</span>
+          </span>
+          <p>One distributed-editing problem solved three ways to compare concurrency models:
+          shared-memory, actor, and functional.</p>
+        </div>
+        <div class="item">
+          <span class="item-h">
+            <a class="name" href="https://github.com/hirojinho/axiom-functor-proof">axiom-functor-proof</a>
+            <span class="tag">Lean</span>
+          </span>
+          <p>Formal proofs in Lean.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="fade">
+      <h2>Writing</h2>
+      <p class="soon">A deep-dive on designing software an AI agent can operate — coming soon.</p>
+    </section>
+
+    <footer class="fade">
+      <a href="https://github.com/hirojinho">GitHub</a>
+      <a href="https://www.linkedin.com/in/eduardo-haraguchi/">LinkedIn</a>
+      <a href="mailto:eduardo.haraguchi@gmail.com">eduardo.haraguchi@gmail.com</a>
+    </footer>
+  </main>
+</body>
+</html>
