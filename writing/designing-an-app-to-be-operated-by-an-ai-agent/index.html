@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Designing an app to be operated by an AI agent — Eduardo Haraguchi</title>
+  <meta name="description" content="How I designed marginalia so an AI agent operates it as a first-class user: one implementation behind three doors, per-turn context rendered from the database, and a deterministic gate between the model and anything irreversible.">
+  <meta name="author" content="Eduardo Haraguchi">
+  <link rel="canonical" href="https://hirojinho.github.io/writing/designing-an-app-to-be-operated-by-an-ai-agent/">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Designing an app to be operated by an AI agent">
+  <meta property="og:description" content="How I designed marginalia so an AI agent operates it as a first-class user: one implementation behind three doors, per-turn context rendered from the database, and a deterministic gate between the model and anything irreversible.">
+  <meta property="og:url" content="https://hirojinho.github.io/writing/designing-an-app-to-be-operated-by-an-ai-agent/">
+  <meta property="og:site_name" content="Eduardo Haraguchi">
+  <meta property="article:published_time" content="2026-06-30">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Designing an app to be operated by an AI agent">
+  <meta name="twitter:description" content="How I designed marginalia so an AI agent operates it as a first-class user: one implementation behind three doors, per-turn context rendered from the database, and a deterministic gate between the model and anything irreversible.">
+  <style>
+    :root {
+      --bg: oklch(1 0 0);
+      --ink: oklch(0.23 0 0);
+      --muted: oklch(0.50 0 0);
+      --faint: oklch(0.90 0 0);
+      --hair: oklch(0.94 0 0);
+      --accent: oklch(0.50 0.11 110);
+      --accent-soft: oklch(0.62 0.09 110);
+      --code-bg: oklch(0.965 0.012 110);
+      --serif: Iowan Old Style, Palatino, Georgia, "Times New Roman", serif;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --measure: 68ch;
+      --z-progress: 100;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: clamp(1.06rem, 1.0rem + 0.32vw, 1.2rem);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid color-mix(in oklab, var(--accent) 32%, transparent);
+      transition: border-color .18s ease, color .18s ease;
+    }
+    a:hover { border-bottom-color: var(--accent); color: var(--accent-soft); }
+    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+    /* reading progress */
+    .progress {
+      position: fixed; inset: 0 0 auto 0; height: 2px; z-index: var(--z-progress);
+      background: var(--accent); transform: scaleX(0); transform-origin: 0 50%;
+      will-change: transform;
+    }
+
+    .wrap {
+      max-width: var(--measure);
+      margin: 0 auto;
+      padding: clamp(2rem, 5vw, 4.5rem) clamp(1.25rem, 5vw, 2rem) 5rem;
+    }
+
+    /* top nav back-link */
+    .topnav { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.02em; margin: 0 0 clamp(2.5rem, 6vw, 3.75rem); }
+    .topnav a { color: var(--muted); border-bottom: none; }
+    .topnav a:hover { color: var(--accent); }
+    .topnav .dia { color: var(--accent); }
+
+    /* article header */
+    .head { margin-bottom: clamp(2.5rem, 6vw, 3.5rem); }
+    .head h1 {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: clamp(2rem, 1.4rem + 2.9vw, 3rem);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.9rem;
+      text-wrap: balance;
+    }
+    .dek {
+      font-family: var(--sans);
+      font-size: clamp(1.08rem, 1.02rem + 0.4vw, 1.25rem);
+      line-height: 1.5;
+      color: color-mix(in oklab, var(--ink) 80%, var(--muted));
+      margin: 0 0 1.4rem;
+      text-wrap: pretty;
+    }
+    .byline {
+      font-family: var(--sans);
+      font-size: 0.9rem; color: var(--muted);
+      display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; align-items: baseline;
+      padding-top: 1.1rem; border-top: 1px solid var(--hair);
+    }
+    .byline .who { color: var(--ink); font-weight: 500; }
+    .byline .sep { color: var(--faint); }
+
+    /* prose */
+    article p { margin: 0 0 1.35rem; text-wrap: pretty; }
+    article h2 {
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: clamp(1.3rem, 1.15rem + 0.7vw, 1.6rem);
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin: clamp(2.75rem, 6vw, 3.75rem) 0 1.1rem;
+      padding-top: clamp(1.6rem, 4vw, 2.2rem);
+      border-top: 1px solid var(--hair);
+      text-wrap: balance;
+    }
+    article h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+    article ul, article ol { margin: 0 0 1.35rem; padding-left: 1.4rem; }
+    article li { margin: 0 0 0.6rem; padding-left: 0.2rem; }
+    article li::marker { color: var(--accent-soft); }
+    article strong { font-weight: 600; }
+    article em { font-style: italic; }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: var(--code-bg);
+      color: color-mix(in oklab, var(--ink) 92%, var(--accent));
+      padding: 0.12em 0.36em;
+      border-radius: 4px;
+      border: 1px solid color-mix(in oklab, var(--accent) 12%, transparent);
+      overflow-wrap: anywhere;
+    }
+    a code { color: inherit; background: color-mix(in oklab, var(--accent) 9%, var(--code-bg)); }
+
+    /* end-of-article footer */
+    .end {
+      margin-top: clamp(3rem, 7vw, 4.5rem);
+      padding-top: 1.6rem;
+      border-top: 1px solid var(--hair);
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+    .end .repo { margin: 0 0 1.4rem; }
+    .end nav { display: flex; gap: 1.4rem; flex-wrap: wrap; }
+    .end nav a { border-bottom: none; }
+    .end nav a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal { animation: rise .7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+      .topnav.reveal { animation-delay: .02s; }
+      .head.reveal { animation-delay: .08s; }
+      article.reveal { animation-delay: .15s; }
+      @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+  <main class="wrap">
+    <p class="topnav reveal"><a href="/"><span class="dia">◆</span> Eduardo Haraguchi</a></p>
+
+    <header class="head reveal">
+      <h1>Designing an app to be operated by an AI agent</h1>
+      <p class="dek">Notes from marginalia, a self-hosted study tutor where an AI agent is a first-class operator — and the architecture decisions that made that load-bearing instead of a demo.</p>
+      <p class="byline">
+        <span class="who">Eduardo Haraguchi</span>
+        <span class="sep">/</span>
+        <span>June 2026</span>
+        <span class="sep">/</span>
+        <span>16 min read</span>
+      </p>
+    </header>
+
+    <article class="reveal">
+<h2>The thesis</h2>
+<p>Most &ldquo;AI features&rdquo; are a chat box wired to a few function-call tools, sitting beside an
+app designed for a human with a mouse. The agent is a guest. It reaches a thin,
+second-class slice of what the app can do, through an interface invented for it and then
+maintained grudgingly.</p>
+<p>marginalia takes the opposite stance: I wanted <em>agent-operability</em> to be a real design
+axis, equal to the human UI, shaping the architecture from the data layer up. The app is a
+self-hosted study tutor: a single Go binary with an embedded single-page frontend, SQLite
+for all state, RAG over a local course corpus, and an LLM tutor that reads your slides,
+tracks a study plan, and takes notes with you. The tutor isn&rsquo;t the interesting part. The
+architecture around it is, specifically the decisions that make &ldquo;an agent operates this
+app&rdquo; load-bearing instead of a demo.</p>
+<p>One thing shapes everything else, so I&rsquo;ll say it plainly. I&rsquo;m an AI-infrastructure
+engineer, not a career Go programmer. My Go is thin. I built much of marginalia by
+directing coding agents rather than hand-writing idiomatic Go, and that turned out to be
+the point rather than an embarrassing footnote: I used coding agents to build software
+meant to be operated by agents. Designing for an agent operator and being driven by one
+are the same skill from two ends. The discipline I leaned on wasn&rsquo;t Go fluency. It was
+deciding what the operations are, where the boundaries sit, and what the agent is and
+isn&rsquo;t allowed to touch, then making an agent execute against that. More on that later.</p>
+<p>A word on scale. This is single-developer, personal-use software that runs on a home
+server and gets used daily for real study. It is not a multi-tenant SaaS. Some decisions
+below are <em>right because</em> the blast radius is one person and one box, and I&rsquo;ll say so
+where it matters. The claim isn&rsquo;t that this is production-grade at scale. It&rsquo;s that
+designing for an agent operator forced a cleaner architecture than I&rsquo;d have written for a
+human alone.</p>
+<h2>Why agent-operability is a real axis</h2>
+<p>Decide that an agent should <em>operate</em> your app, not just answer questions about it but
+change its state, and you hit a question most apps never ask: what is the real surface of
+operations, and who can reach it? In a human-only app that answer is implicit and
+scattered across HTTP handlers and frontend JavaScript, shaped however the UI needed it.
+That works until a non-human operator shows up needing the same operations in a form it
+can script. Then you bolt on an API exposing a narrower, subtly inconsistent slice, and
+now you have two code paths and two sets of bugs to keep in sync. The API rots because
+it&rsquo;s nobody&rsquo;s primary path.</p>
+<p>Agent-operability is really a forcing function for an old discipline: separate the
+operation from the caller. Do that well and the agent isn&rsquo;t a special case. It&rsquo;s another
+caller of the same operations the human uses.</p>
+<h2>The design: one implementation, three doors</h2>
+<p>The core structural decision in marginalia is that every domain operation is a single
+method on one type, <code>agent.App</code>, reached through three doors:</p>
+<ol>
+<li><strong>The web UI</strong>, over HTTP. <code>handler/*.go</code> calls <code>App</code> methods directly.</li>
+<li><strong>A token-gated HTTP/JSON API.</strong> The same handlers, gated by a bearer token, so an
+   external agent can reach the operations the browser reaches.</li>
+<li><strong><code>claw-cli</code></strong>, a command-line binary the in-sandbox agent drives, whose subcommands
+   call the same <code>App</code> methods the handlers call.</li>
+</ol>
+<p>This is verifiable in the code, not aspirational. <code>App.LoadPlan</code>, <code>App.SavePlan</code>, and
+<code>App.UpdateSessionTopic</code> each have one body and multiple front doors. <code>LoadPlan</code> is
+called by the HTTP handler (<code>handler/plan.go</code>) and by <code>claw-cli</code>&lsquo;s <code>plan show</code>
+subcommand (<code>claw-cli/main.go</code>). <code>UpdateSessionTopic</code> is reached by the chat handler,
+the sessions handler, and <code>claw-cli session topic</code>. Both the HTTP server and the CLI
+construct the same <code>*agent.App</code> from the same environment and the same SQLite file, the
+CLI via <code>newAppFromEnv()</code> in <code>claw-cli/main.go</code>. There is no separate &ldquo;agent service&rdquo;
+with its own logic. The agent&rsquo;s hands reach into the identical methods the browser does.</p>
+<p>A deliberate non-decision reinforces this: there is no service/repository layer
+(<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0002-no-service-repository-layer.md">ADR 0002</a>). The original stability plan
+prescribed <code>SessionService</code>/<code>PDFService</code> and a mockable <code>repository/</code> layer, the standard
+testable-backend advice. I skipped it. <code>agent.App</code> methods <em>are</em> the persistence-and-
+orchestration surface; handlers and <code>claw-cli</code> call them directly; tests use in-memory
+SQLite instead of mock interfaces. Two layers (<code>agent/</code>, <code>handler/</code>) instead of four. The
+ADR records the honest tradeoff: the concrete SQLite dependency leaks slightly into <code>App</code>
+signatures, and handler tests need real DB fixtures rather than mocks (cheap with
+<code>:memory:</code> SQLite, but it would hurt at higher LOC or with team contributors). At one
+developer and ~5,500 LOC, fewer layers to keep in sync was the right call. &ldquo;One
+implementation, three doors&rdquo; is easier to hold true when there&rsquo;s only one implementation
+to begin with.</p>
+<p><code>claw-cli</code> is what makes the agent a real operator rather than a chatbot. It&rsquo;s a
+scriptable command surface built for a non-human: <code>plan show/status/toggle/rewrite</code>,
+<code>pdf list/current/extract</code>, <code>rag search</code>, <code>memory save/search/load</code>,
+<code>course settings get/set</code>, <code>knowledge create/show/search/list</code>,
+<code>confidence log/trajectory</code>, <code>note save</code>, <code>session topic</code>, <code>web fetch</code>,
+<code>skill dispatch</code>, <code>component emit/show</code>. Each subcommand is a thin wrapper over an <code>App</code>
+method or a <code>Tool*</code> function in <code>agent/tools_*.go</code>, with no business logic of its own.</p>
+<h2>The agent&rsquo;s context is rendered from the database, per turn</h2>
+<p>A chatbot gets a static system prompt. An operator needs to know the live state of the
+thing it&rsquo;s operating. So before each agentic turn, marginalia synthesizes a fresh
+<code>AGENTS.md</code> briefing from the current database state. <code>agent/sandbox.go</code> creates a
+per-session sandbox directory at <code>&lt;vault&gt;/data/agent-sessions/&lt;sessionID&gt;/</code> and, in
+<code>Create()</code>, calls <code>writeAgentsMD()</code>, which shells out to <code>claw-cli memory load</code>. That
+invokes <code>AssembleAgentsMD()</code> in <code>agent/memory.go</code>, which reads live state and renders it
+into one markdown document. The sections it assembles, each pulled from the DB at request
+time:</p>
+<ul>
+<li>the learner&rsquo;s <strong>profile</strong> (<code>Memory</code> rows with <code>kind='profile'</code>),</li>
+<li><strong>global observations and interests</strong> and <strong>per-course context</strong> (<code>kind='project'</code>,
+  scoped by <code>course_id</code>),</li>
+<li><strong>active feedback rules</strong> (<code>kind='feedback'</code>),</li>
+<li>the <strong>recent sessions</strong> digest for the active course,</li>
+<li>the <strong>skills index</strong>, parsed from the <code>SKILL.md</code> frontmatter of the mounted skills,</li>
+<li>plus pedagogy rules and memory-tool instructions.</li>
+</ul>
+<p>There&rsquo;s real restraint here, not just string concatenation. <code>AssembleAgentsMD</code> enforces a
+per-section byte cap and a total ~4 KB ceiling, dropping lower-priority sections on
+overflow. The briefing is bounded on purpose, because context is a budget.</p>
+<p>What I care about most is <em>liveness</em>. Because <code>AGENTS.md</code> is regenerated every turn from
+the source-of-truth tables, a change anywhere (a setting written through the settings
+form, a plan toggled in the rail, a fact saved to memory) is visible to the agent on its
+next turn, with no restart and no cache to invalidate.
+<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0016-agent-may-write-steering-via-deterministic-tool.md">ADR 0016</a> leans on
+exactly this. When the tutor changes a course setting via <code>claw-cli course settings set</code>,
+the write lands in the <code>course_settings</code> table and &ldquo;takes effect on the next turn for
+free&rdquo; because the briefing is rebuilt from that table. Human and agent read and write the
+same state through the same doors, and the per-turn briefing is how the agent re-orients
+to it.</p>
+<h2>The runtime: an embedded Pi subprocess, streamed as SSE</h2>
+<p>The earliest <code>/chat</code> was an in-process Go loop calling an OpenAI-compatible endpoint with
+a fixed list of function tools. That&rsquo;s the common shape, and it has a ceiling: the model
+doesn&rsquo;t run protocols, doesn&rsquo;t follow skills, doesn&rsquo;t accumulate memory, can&rsquo;t dispatch
+multi-step work. <a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0006-embed-pi-as-agent-runtime.md">ADR 0006</a> records replacing
+it. The gap between this app and my day-to-day Claude Code workflow was the runtime fabric
+(skills, memory, verification), not the LLM. The fix was to embed an agent runtime rather
+than write a smarter prompt.</p>
+<p>So marginalia embeds <strong>Pi</strong> (<code>@earendil-works/pi-coding-agent</code>, MIT) as the runtime.
+<code>agent/pi_runner.go</code>&lsquo;s <code>RunPi()</code> spawns <code>pi --mode rpc</code> as a subprocess, working directory
+set to the per-session sandbox, a <code>--skill</code> flag pointing at the mounted skills. In RPC
+mode the subprocess stays alive across prompts; a turn&rsquo;s message is sent as JSON over
+stdin. Pi emits a JSONL event stream on stdout, which <code>parsePiLine()</code> decodes into typed
+events: <code>token</code> (text deltas), <code>reasoning</code> (thinking deltas), <code>tool_start</code> and <code>tool_end</code>,
+<code>skill_start</code>, and <code>done</code> (with token-usage counts). Because the agent invokes <code>claw-cli</code>
+<em>through Pi&rsquo;s bash tool</em>, every domain operation surfaces as a <code>tool_start</code>/<code>tool_end</code>
+pair.</p>
+<p><code>handler/chat.go</code> translates that stream into Server-Sent Events. <code>streamPiTurn()</code> reads
+<code>PiEvent</code> values off a channel and <code>handlePiEvent()</code> writes and flushes one SSE frame per
+event: <code>{"delta": "..."}</code> for tokens, an input summary for <code>tool_start</code>, an output summary
+for <code>tool_end</code>, usage counts on <code>done</code>. The browser renders tokens, a collapsible
+&ldquo;thinking&rdquo; block, and a tool panel from those frames.</p>
+<p>The honest costs are in the ADR. Per-turn latency rose to roughly 5–15 seconds (Pi
+cold-start plus streaming), accepted because per-turn isolation is the right v1 default.
+The deploy gained a third binary, <code>pi</code> alongside <code>marginalia</code> and <code>cloudflared</code>, which
+softens ADR 0003&rsquo;s &ldquo;single binary&rdquo; stance to a footnote. And the real capability ceiling:
+non-Claude OpenCode models (DeepSeek, Kimi, GLM) are weaker on protocol-heavy skills, so
+the app doesn&rsquo;t pretend to replace every Claude Code interaction. The choice was
+explicitly reversible. A Node sidecar or a TypeScript extension remain available if
+Pi-over-RPC proves too brittle for the model fleet. I&rsquo;d rather ship a reversible v1 with
+named limits than a &ldquo;general agent&rdquo; that quietly fails on the hard skills.</p>
+<h2>RAG over the local corpus</h2>
+<p>The retrieval layer is small and reads cleanly. <code>agent/chunker.go</code>&lsquo;s <code>ChunkFile()</code> splits
+course markdown by heading structure (H1 parent, H2 sections), infers course id and
+category from the file path, and splits over-long sections (&gt;1500 bytes) on paragraph
+boundaries. <code>agent/embed.go</code>&lsquo;s <code>EmbedBatch()</code> POSTs to an OpenAI-compatible <code>/embeddings</code>
+endpoint and returns <code>[][]float32</code>. <code>agent/vectorstore.go</code>&lsquo;s <code>IndexCorpus()</code>, kicked off
+in a goroutine at startup per <code>main.go</code>, walks <code>data/corpus/</code>, re-embeds only files that
+changed (<code>NeedsReindex()</code>), and stores each chunk&rsquo;s vector as a little-endian float BLOB
+in a <code>corpus_chunks</code> table in the same SQLite DB. <code>Search()</code> embeds the query, scans the
+candidate rows, computes cosine similarity in Go, filters below a 0.3 threshold, and falls
+back to keyword search when embedding fails or returns nothing.</p>
+<p>This is a brute-force cosine scan, not an ANN index. No HNSW, no vector extension. For a
+personal corpus that&rsquo;s exactly the right amount of machinery: a few readable functions in
+the one SQLite file everything else lives in, with no operational dependency to break.
+The agent reaches all of this
+through one door, <code>claw-cli rag search</code>, the same retrieval the rest of the app uses.</p>
+<h2>The overnight spec→verify pipeline, with the verifier as a hard gate</h2>
+<p>The most ambitious piece of agent-operability isn&rsquo;t <em>inside</em> a study session. It&rsquo;s the
+pipeline that lets an agent change the app itself, unattended, overnight. I author a
+feature spec as a markdown file and push it; overnight, a Pi runtime on a separate machine
+implements the change, verifies it, and on success deploys it.</p>
+<p>The design is a trust gradient. Pi&rsquo;s model output is the least-trusted layer; below it sit
+an author-written bash verifier, an orchestrator shell script, the scheduler, and finally
+systemd/git. Every load-bearing decision pushes risk outward, from the model toward
+determinism. The architecture lives mostly in shell scripts on the VPS, out of this repo
+by design, but the contract it enforces is in-repo and is the interesting part.</p>
+<p>That contract is the verifier as a hard gate, documented in <code>specs/README.md</code> and checked
+by <code>scripts/lint-specs.sh</code>. Every spec must carry a <code>## Verification recipe</code> with two bash
+blocks. The <code>### Pre-baseline</code> block must <strong>fail on current <code>main</code></strong>: exit non-zero means
+&ldquo;the feature is genuinely missing, as expected.&rdquo; If it exits <em>zero</em> (spec already
+satisfied, or verifier broken), the run aborts to <code>failed/</code>. After implementation, the
+<code>### Post-acceptance</code> block, usually the same script, must <strong>pass</strong> against a staging
+instance built from the new binary. Exit codes are the only judgment that crosses the
+model/deterministic boundary. Not the model&rsquo;s self-report. Not a diff review. An exit
+code. The gate runner spins staging on a separate port against a snapshot of the prod DB,
+runs pre-baseline against the <em>old</em> binary and post-acceptance against the <em>new</em> one, and
+only a clean exit-0 lets the change merge <code>--ff-only</code> and deploy. The same deterministic-
+tool discipline shows up one level down, inside the app:
+<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0017-agent-may-restructure-plan-via-deterministic-rewrite.md">ADR 0017</a> records
+why plan edits go through <code>ToolRewritePlan</code>, a deterministic rewrite that preserves task
+UUIDs across edits (matching by title) so a live session&rsquo;s confidence and retrieval history
+stays anchored to its task rather than orphaned.</p>
+<p>This is TDD&rsquo;s red-green discipline turned into an unattended pipeline&rsquo;s safety mechanism.
+The author&rsquo;s pre-baseline-must-fail step <em>is</em> the red test. If you can&rsquo;t write a check
+that fails before and passes after, you don&rsquo;t have a spec the agent can be trusted to
+execute. The directory itself is the state machine:
+<code>queue/ → in-progress/ → done/ | failed/</code>.</p>
+<p>The orchestrator scripts — scheduler, staging spin-up, deploy, rollback — live in a private
+infra repo, not here. What&rsquo;s in this repo and described above is the spec contract the
+pipeline enforces, which is the part I&rsquo;d defend: the verifier-as-gate, the pre-baseline-must-
+fail red step, and the directory state machine.</p>
+<h2>What I learned directing agents to build this</h2>
+<p>Orchestrating coding agents to build this changed what the hard part was. It stopped
+being syntax and became specification. An agent will happily write plausible Go that
+drifts from what you meant, so the leverage moved upstream into the ADRs, the <code>claw-cli</code>
+command contract, and the spec/verifier discipline. Those documents are how I steer a
+coding agent. They&rsquo;re also how the in-app agent reads the system. The same artifacts serve
+both. The overnight pipeline is the sharpest case: the verifier exists because I don&rsquo;t
+trust agent output on its own, mine or the app&rsquo;s, and the only way I found to delegate
+real work safely was to make a dumb deterministic check the final authority. Working this
+way taught me to treat my Go thinness as a design constraint, not a wall. If I can&rsquo;t
+easily read every line, the architecture has to stay legible, the boundaries explicit,
+the gates automatic. That pressure produced better structure than confidence in my own
+code would have.</p>
+<h2>The engineering judgment: boring on purpose</h2>
+<p>The substrate under all of this is deliberately dull, and the ADRs say why. No Docker
+(<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0003-no-docker-portability-first.md">ADR 0003</a>): deploy is <code>GOOS=linux go
+build</code>, <code>scp</code>, atomic binary swap, <code>systemctl --user restart</code>, rollback a literal file
+swap (<code>mv marginalia.bak marginalia</code>). One host, no fleet. Docker would buy reproducibility
+I get from <code>go.mod</code>/<code>go.sum</code> pinning, at the cost of a daemon and a registry. Vanilla JS,
+no build step (<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0004-vanilla-js-frontend.md">ADR 0004</a>): plain HTML/JS plus
+pdf.js, so <code>go build</code> is the entire build. Stay with Go, restructure rather than rewrite
+(<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0001-stay-with-go.md">ADR 0001</a>). Push to <code>main</code>, no PRs
+(<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0005-push-to-main-no-prs.md">ADR 0005</a>), with the explicit note that this breaks
+the moment a second contributor shows up.</p>
+<p>Two things make this judgment defensible rather than just lazy. Every one of these is
+written down with its tradeoff and its revisit trigger: ADR 0002 revisits &ldquo;if the codebase
+doubles or a second backend appears,&rdquo; ADR 0003 &ldquo;a second host pushes back toward
+containers,&rdquo; ADR 0005 &ldquo;introduce PRs when a second contributor arrives.&rdquo; The decisions are
+scoped to actual constraints, not asserted as universal truths. And the boring substrate
+is what makes the agentic parts safe. An overnight agent that deploys via binary swap can
+be rolled back by a human in one <code>mv</code>, and a briefing rendered from SQLite has no cache
+layer to desync. The adventurous parts sit on a substrate dull enough that recovery is
+trivial when they misbehave.</p>
+<p>There&rsquo;s also a code-style spine: a <code>STYLE.md</code> with eleven locked rules (one operation per
+line, typed domain identifiers, <code>interface{}</code> only at protocol boundaries, behavior-named
+tests against real <code>:memory:</code> SQLite), enforced by <code>.golangci.yml</code> and a pre-commit hook.
+A full-repo <code>golangci-lint run ./...</code> passes clean, and the config isn&rsquo;t lenient: it turns
+on <code>errcheck</code>, <code>revive</code>&lsquo;s exported-doc-comment rule, <code>forbidigo</code> (banning <code>interface{}</code> and
+<code>any</code> outside protocol boundaries), and a dozen others, with the only exclusions being
+narrow, per-file, and documented inline for the genuine JSON/<code>sql.Scan</code> boundaries where
+<code>interface{}</code> is legitimate. The pre-commit hook additionally gates newly introduced issues
+with <code>--new-from-rev HEAD</code>, so the clean baseline stays clean as the agent commits.</p>
+<h2>What generalizes, and what doesn&rsquo;t</h2>
+<p>Pulling back from the study domain, four ideas transfer.</p>
+<ul>
+<li><strong>Make the operation the unit, and give it more than one door.</strong> The agent stops being a
+  second-class integration the moment it calls the same methods the UI calls. Separating
+  operation from caller is good architecture independent of agents; the agent just makes
+  the cost of <em>not</em> doing it immediate.</li>
+<li><strong>Render the agent&rsquo;s context from source-of-truth state, per turn.</strong> A static prompt
+  describes an app; a briefing assembled from live tables describes <em>this app right now</em>.
+  The payoff is that human and agent writes are symmetric and instantly mutually visible.</li>
+<li><strong>Put a deterministic gate between the model and anything irreversible.</strong> Exit codes,
+  not self-reports. The model proposes; a dumb, trustworthy check disposes. This is the
+  most reusable idea here, and it has nothing to do with which model you run.</li>
+<li><strong>Keep the substrate boring so the adventurous parts stay recoverable.</strong> Agent autonomy
+  is only as safe as the rollback under it.</li>
+</ul>
+<p>Now the honest limitations, because the design has real edges.</p>
+<ul>
+<li><strong>Per-turn Pi cold-start is 5–15s of latency.</strong> Fine for deep study, wrong for a snappy
+  chat product. Per-turn isolation over a warm long-lived agent is a v1 tradeoff, not a
+  final answer.</li>
+<li><strong>The capability ceiling is the model fleet, not the harness.</strong> Protocol-heavy skills
+  degrade on non-Claude OpenCode models. The app names this rather than papering over it.</li>
+<li><strong>Almost every &ldquo;one operation, three doors&rdquo; guarantee rests on convention, not a
+  compiler.</strong> Nothing <em>forces</em> a new <code>App</code> method to gain a <code>claw-cli</code> subcommand — no
+  codegen, test, or lint check enforces door parity. Several ADRs (0016, 0017) exist
+  precisely because a capability was added to the UI/Go layer but not wired to the agent&rsquo;s
+  door, and had to be retrofitted. The pattern is a discipline, not an invariant.</li>
+<li><strong>This is one user on one box.</strong> The choices that make it elegant (no service layer, no
+  Docker, push to main, brute-force RAG) are scoped to that. I&rsquo;d make several differently
+  for a team or a tenant.</li>
+</ul>
+<p>The claim I&rsquo;d defend in an interview isn&rsquo;t &ldquo;this is how all agent-operated software should
+be built.&rdquo; It&rsquo;s narrower and more useful. Once you decide an agent is a real operator of
+your app, the cleanest path is to stop building it a special door and make it walk through
+the same ones your humans do, then put a deterministic gate between it and anything you
+can&rsquo;t take back. marginalia is one worked example, tradeoffs written down, built the way
+it preaches: by an engineer directing agents to make software that agents operate.</p>
+    </article>
+
+    <footer class="end">
+      <p class="repo">The code is open source: <a href="https://github.com/hirojinho/marginalia">github.com/hirojinho/marginalia</a>.</p>
+      <nav>
+        <a href="/">← Back to home</a>
+        <a href="https://github.com/hirojinho">GitHub</a>
+        <a href="https://www.linkedin.com/in/eduardo-haraguchi/">LinkedIn</a>
+      </nav>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      var bar = document.getElementById("progress");
+      var ticking = false;
+      function update() {
+        var h = document.documentElement;
+        var max = h.scrollHeight - h.clientHeight;
+        var p = max > 0 ? Math.min(1, h.scrollTop / max) : 0;
+        bar.style.transform = "scaleX(" + p + ")";
+        ticking = false;
+      }
+      function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(update); } }
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll, { passive: true });
+      update();
+    })();
+  </script>
+</body>
+</html>
