@@ -210,7 +210,7 @@ That works until a non-human operator shows up needing the same operations in a 
 can script. Then you bolt on an API exposing a narrower, subtly inconsistent slice, and
 now you have two code paths and two sets of bugs to keep in sync. The API rots because
 it&rsquo;s nobody&rsquo;s primary path.</p>
-<p>Agent-operability is really a forcing function for an old discipline: separate the
+<p>Agent-operability is a forcing function for an old discipline: separate the
 operation from the caller. Do that well and the agent isn&rsquo;t a special case. It&rsquo;s another
 caller of the same operations the human uses.</p>
 <h2>The design: one implementation, three doors</h2>
@@ -230,7 +230,7 @@ subcommand (<code>claw-cli/main.go</code>). <code>UpdateSessionTopic</code> is r
 the sessions handler, and <code>claw-cli session topic</code>. Both the HTTP server and the CLI
 construct the same <code>*agent.App</code> from the same environment and the same SQLite file, the
 CLI via <code>newAppFromEnv()</code> in <code>claw-cli/main.go</code>. There is no separate &ldquo;agent service&rdquo;
-with its own logic. The agent&rsquo;s hands reach into the identical methods the browser does.</p>
+with its own logic; the agent calls the identical methods the browser does.</p>
 <p>A deliberate non-decision reinforces this: there is no service/repository layer
 (<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0002-no-service-repository-layer.md">ADR 0002</a>). The original stability plan
 prescribed <code>SessionService</code>/<code>PDFService</code> and a mockable <code>repository/</code> layer, the standard
@@ -284,8 +284,8 @@ to it.</p>
 <h2>The runtime: an embedded Pi subprocess, streamed as SSE</h2>
 <p>The earliest <code>/chat</code> was an in-process Go loop calling an OpenAI-compatible endpoint with
 a fixed list of function tools. That&rsquo;s the common shape, and it has a ceiling: the model
-doesn&rsquo;t run protocols, doesn&rsquo;t follow skills, doesn&rsquo;t accumulate memory, can&rsquo;t dispatch
-multi-step work. <a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0006-embed-pi-as-agent-runtime.md">ADR 0006</a> records replacing
+can&rsquo;t run protocols, follow skills, accumulate memory, or dispatch multi-step
+work. <a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0006-embed-pi-as-agent-runtime.md">ADR 0006</a> records replacing
 it. The gap between this app and my day-to-day Claude Code workflow was the runtime fabric
 (skills, memory, verification), not the LLM. The fix was to embed an agent runtime rather
 than write a smarter prompt.</p>
@@ -303,7 +303,7 @@ pair.</p>
 event: <code>{"delta": "..."}</code> for tokens, an input summary for <code>tool_start</code>, an output summary
 for <code>tool_end</code>, usage counts on <code>done</code>. The browser renders tokens, a collapsible
 &ldquo;thinking&rdquo; block, and a tool panel from those frames.</p>
-<p>The honest costs are in the ADR. Per-turn latency rose to roughly 5–15 seconds (Pi
+<p>The costs are in the ADR. Per-turn latency rose to roughly 5–15 seconds (Pi
 cold-start plus streaming), accepted because per-turn isolation is the right v1 default.
 The deploy gained a third binary, <code>pi</code> alongside <code>marginalia</code> and <code>cloudflared</code>, which
 softens ADR 0003&rsquo;s &ldquo;single binary&rdquo; stance to a footnote. And the real capability ceiling:
@@ -324,7 +324,7 @@ in a <code>corpus_chunks</code> table in the same SQLite DB. <code>Search()</cod
 candidate rows, computes cosine similarity in Go, filters below a 0.3 threshold, and falls
 back to keyword search when embedding fails or returns nothing.</p>
 <p>This is a brute-force cosine scan, not an ANN index. No HNSW, no vector extension. For a
-personal corpus that&rsquo;s exactly the right amount of machinery: a few readable functions in
+personal corpus that&rsquo;s the right amount of machinery: a few readable functions in
 the one SQLite file everything else lives in, with no operational dependency to break.
 The agent reaches all of this
 through one door, <code>claw-cli rag search</code>, the same retrieval the rest of the app uses.</p>
@@ -337,7 +337,7 @@ implements the change, verifies it, and on success deploys it.</p>
 an author-written bash verifier, an orchestrator shell script, the scheduler, and finally
 systemd/git. Every load-bearing decision pushes risk outward, from the model toward
 determinism. The architecture lives mostly in shell scripts on the VPS, out of this repo
-by design, but the contract it enforces is in-repo and is the interesting part.</p>
+by design. The contract it enforces is in-repo, and that&rsquo;s what I&rsquo;ll walk through.</p>
 <p>That contract is the verifier as a hard gate, documented in <code>specs/README.md</code> and checked
 by <code>scripts/lint-specs.sh</code>. Every spec must carry a <code>## Verification recipe</code> with two bash
 blocks. The <code>### Pre-baseline</code> block must <strong>fail on current <code>main</code></strong>: exit non-zero means
@@ -345,8 +345,8 @@ blocks. The <code>### Pre-baseline</code> block must <strong>fail on current <co
 satisfied, or verifier broken), the run aborts to <code>failed/</code>. After implementation, the
 <code>### Post-acceptance</code> block, usually the same script, must <strong>pass</strong> against a staging
 instance built from the new binary. Exit codes are the only judgment that crosses the
-model/deterministic boundary. Not the model&rsquo;s self-report. Not a diff review. An exit
-code. The gate runner spins staging on a separate port against a snapshot of the prod DB,
+model/deterministic boundary — not the model&rsquo;s self-report, not a diff review. The gate
+runner spins staging on a separate port against a snapshot of the prod DB,
 runs pre-baseline against the <em>old</em> binary and post-acceptance against the <em>new</em> one, and
 only a clean exit-0 lets the change merge <code>--ff-only</code> and deploy. The same deterministic-
 tool discipline shows up one level down, inside the app:
@@ -360,9 +360,9 @@ that fails before and passes after, you don&rsquo;t have a spec the agent can be
 execute. The directory itself is the state machine:
 <code>queue/ → in-progress/ → done/ | failed/</code>.</p>
 <p>The orchestrator scripts — scheduler, staging spin-up, deploy, rollback — live in a private
-infra repo, not here. What&rsquo;s in this repo and described above is the spec contract the
-pipeline enforces, which is the part I&rsquo;d defend: the verifier-as-gate, the pre-baseline-must-
-fail red step, and the directory state machine.</p>
+infra repo, not here. What&rsquo;s in this repo, and described above, is the spec contract the
+pipeline enforces: the verifier-as-gate, the pre-baseline-must-fail red step, and the
+directory state machine.</p>
 <h2>What I learned directing agents to build this</h2>
 <p>Orchestrating coding agents to build this changed what the hard part was. It stopped
 being syntax and became specification. An agent will happily write plausible Go that
@@ -377,7 +377,7 @@ easily read every line, the architecture has to stay legible, the boundaries exp
 the gates automatic. That pressure produced better structure than confidence in my own
 code would have.</p>
 <h2>The engineering judgment: boring on purpose</h2>
-<p>The substrate under all of this is deliberately dull, and the ADRs say why. No Docker
+<p>The substrate under all of this is dull, and the ADRs say why. No Docker
 (<a href="https://github.com/hirojinho/marginalia/blob/main/docs/adr/0003-no-docker-portability-first.md">ADR 0003</a>): deploy is <code>GOOS=linux go
 build</code>, <code>scp</code>, atomic binary swap, <code>systemctl --user restart</code>, rollback a literal file
 swap (<code>mv marginalia.bak marginalia</code>). One host, no fleet. Docker would buy reproducibility
@@ -416,12 +416,13 @@ with <code>--new-from-rev HEAD</code>, so the clean baseline stays clean as the 
   describes an app; a briefing assembled from live tables describes <em>this app right now</em>.
   The payoff is that human and agent writes are symmetric and instantly mutually visible.</li>
 <li><strong>Put a deterministic gate between the model and anything irreversible.</strong> Exit codes,
-  not self-reports. The model proposes; a dumb, trustworthy check disposes. This is the
-  most reusable idea here, and it has nothing to do with which model you run.</li>
+  not self-reports: the model suggests a change, and a dumb, trustworthy check decides
+  whether it ships. This is the most reusable idea here, and it has nothing to do with
+  which model you run.</li>
 <li><strong>Keep the substrate boring so the adventurous parts stay recoverable.</strong> Agent autonomy
   is only as safe as the rollback under it.</li>
 </ul>
-<p>Now the honest limitations, because the design has real edges.</p>
+<p>Now the limitations, because the design has real edges.</p>
 <ul>
 <li><strong>Per-turn Pi cold-start is 5–15s of latency.</strong> Fine for deep study, wrong for a snappy
   chat product. Per-turn isolation over a warm long-lived agent is a v1 tradeoff, not a
